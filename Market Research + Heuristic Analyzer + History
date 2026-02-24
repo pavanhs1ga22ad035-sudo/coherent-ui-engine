@@ -1,0 +1,349 @@
+import React, { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+
+/* ======================================================
+   SKILL DETECTION LOGIC (HEURISTIC, OFFLINE)
+====================================================== */
+
+const SKILL_CATEGORIES = {
+  "Core CS": ["dsa", "oop", "dbms", "os", "networks"],
+  Languages: [
+    "java",
+    "python",
+    "javascript",
+    "typescript",
+    "c++",
+    "c#",
+    " go ",
+  ],
+  Web: ["react", "next.js", "node.js", "express", "rest", "graphql"],
+  Data: ["sql", "mongodb", "postgresql", "mysql", "redis"],
+  "Cloud/DevOps": [
+    "aws",
+    "azure",
+    "gcp",
+    "docker",
+    "kubernetes",
+    "ci/cd",
+    "linux",
+  ],
+  Testing: ["selenium", "cypress", "playwright", "junit", "pytest"],
+};
+
+export function extractSkills(jdText = "") {
+  const lower = jdText.toLowerCase();
+  const result = {};
+
+  Object.entries(SKILL_CATEGORIES).forEach(([category, skills]) => {
+    const detected = skills.filter((skill) => lower.includes(skill));
+    if (detected.length > 0) result[category] = detected;
+  });
+
+  if (Object.keys(result).length === 0) {
+    result["General"] = ["DSA", "OOP", "SQL", "Git", "Basic Web"];
+  }
+
+  return result;
+}
+
+/* ======================================================
+   READINESS SCORE
+====================================================== */
+
+export function calculateReadiness({
+  categoriesCount,
+  company,
+  role,
+  jdLength,
+}) {
+  let score = 35;
+  score += Math.min(categoriesCount * 5, 30);
+  if (company) score += 10;
+  if (role) score += 10;
+  if (jdLength > 800) score += 10;
+  return Math.min(score, 100);
+}
+
+/* ======================================================
+   CHECKLIST + PLAN + QUESTIONS GENERATORS
+====================================================== */
+
+export function generateChecklist(skills) {
+  const flatSkills = Object.values(skills).flat();
+
+  return {
+    "Round 1: Aptitude / Basics": [
+      "Revise quantitative aptitude basics",
+      "Practice logical reasoning sets",
+      "Review OOP pillars",
+      "Revise DBMS normalization",
+      "Brush up OS fundamentals",
+    ],
+    "Round 2: DSA + Core CS": [
+      "Solve 20 array + string problems",
+      "Practice recursion & backtracking",
+      "Revise time & space complexity",
+      "Implement binary search variations",
+      "Revise DBMS indexing & joins",
+    ],
+    "Round 3: Tech Interview": [
+      flatSkills.includes("react")
+        ? "Explain React lifecycle & hooks"
+        : "Explain your strongest project architecture",
+      flatSkills.includes("sql")
+        ? "Design optimized relational schema"
+        : "Explain database design decisions",
+      "Prepare 2 major project deep dives",
+      "Discuss trade-offs in design choices",
+      "Prepare debugging approach examples",
+    ],
+    "Round 4: Managerial / HR": [
+      "Prepare STAR format answers",
+      "Why this company?",
+      "Strengths & weaknesses",
+      "Conflict resolution example",
+      "Long-term career goals",
+    ],
+  };
+}
+
+export function generatePlan(skills) {
+  const flatSkills = Object.values(skills).flat();
+
+  return {
+    "Day 1-2": [
+      "Revise OS, DBMS, OOP",
+      flatSkills.includes("react") && "Revise React fundamentals",
+      flatSkills.includes("aws") && "Review AWS core services",
+    ].filter(Boolean),
+    "Day 3-4": [
+      "Practice DSA medium problems",
+      "Binary search + recursion",
+      "Timed coding practice",
+    ],
+    "Day 5": ["Align resume with JD keywords", "Refactor 1 project"],
+    "Day 6": ["Mock technical interview", "Behavioral questions practice"],
+    "Day 7": ["Revise weak areas", "Reattempt incorrect problems"],
+  };
+}
+
+export function generateQuestions(skills) {
+  const flatSkills = Object.values(skills).flat();
+  const questions = [];
+
+  if (flatSkills.includes("sql"))
+    questions.push("Explain indexing and when it improves performance.");
+  if (flatSkills.includes("react"))
+    questions.push("Compare useState vs useReducer in React.");
+  if (flatSkills.includes("aws"))
+    questions.push("Explain difference between EC2 and Lambda.");
+  if (flatSkills.includes("dsa"))
+    questions.push("How would you optimize search in sorted data?");
+
+  while (questions.length < 10) {
+    questions.push("Explain a challenging bug you fixed in a project.");
+  }
+
+  return questions.slice(0, 10);
+}
+
+/* ======================================================
+   LOCAL STORAGE UTIL
+====================================================== */
+
+const STORAGE_KEY = "placement_history";
+
+function saveToHistory(entry) {
+  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([entry, ...existing]));
+}
+
+export function getHistory() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+}
+
+/* ======================================================
+   ANALYZE COMPONENT (DEFAULT EXPORT ADDED TO FIX BUILD)
+====================================================== */
+
+export default function Analyze({ navigateToResults }) {
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [jdText, setJdText] = useState("");
+
+  const handleAnalyze = () => {
+    const skills = extractSkills(jdText);
+    const readiness = calculateReadiness({
+      categoriesCount: Object.keys(skills).length,
+      company,
+      role,
+      jdLength: jdText.length,
+    });
+
+    const entry = {
+      id: Date.now(),
+      createdAt: new Date().toISOString(),
+      company,
+      role,
+      jdText,
+      extractedSkills: skills,
+      checklist: generateChecklist(skills),
+      plan: generatePlan(skills),
+      questions: generateQuestions(skills),
+      readinessScore: readiness,
+    };
+
+    saveToHistory(entry);
+    localStorage.setItem("latest_analysis", JSON.stringify(entry));
+
+    if (navigateToResults) navigateToResults();
+  };
+
+  return (
+    <Card className="p-6 rounded-2xl shadow-xl">
+      <CardHeader>
+        <CardTitle>Analyze Job Description</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <input
+          className="w-full p-2 border rounded"
+          placeholder="Company"
+          value={company}
+          onChange={(e) => setCompany(e.target.value)}
+        />
+        <input
+          className="w-full p-2 border rounded"
+          placeholder="Role"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+        />
+        <textarea
+          className="w-full p-2 border rounded h-40"
+          placeholder="Paste JD here"
+          value={jdText}
+          onChange={(e) => setJdText(e.target.value)}
+        />
+        <Button onClick={handleAnalyze} className="w-full">
+          Analyze
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ======================================================
+   RESULTS PAGE
+====================================================== */
+
+export function Results() {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const latest = JSON.parse(localStorage.getItem("latest_analysis"));
+    setData(latest);
+  }, []);
+
+  if (!data) return <div>No analysis found.</div>;
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-6 rounded-2xl shadow-xl">
+        <CardHeader>
+          <CardTitle>Readiness Score</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-4xl font-bold">
+            {data.readinessScore}/100
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="p-6 rounded-2xl shadow-xl">
+        <CardHeader>
+          <CardTitle>Extracted Skills</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {Object.entries(data.extractedSkills).map(([cat, skills]) => (
+            <div key={cat} className="mt-3">
+              <div className="font-semibold">{cat}</div>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {skills.map((s, i) => (
+                  <span
+                    key={i}
+                    className="px-3 py-1 bg-muted rounded-full text-sm"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ======================================================
+   HISTORY PAGE
+====================================================== */
+
+export function History({ navigateToResults }) {
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    setHistory(getHistory());
+  }, []);
+
+  const openEntry = (entry) => {
+    localStorage.setItem("latest_analysis", JSON.stringify(entry));
+    if (navigateToResults) navigateToResults();
+  };
+
+  return (
+    <div className="space-y-4">
+      {history.map((item) => (
+        <Card
+          key={item.id}
+          className="p-4 rounded-xl cursor-pointer hover:shadow-lg"
+          onClick={() => openEntry(item)}
+        >
+          <div className="flex justify-between">
+            <div>
+              <div className="font-semibold">
+                {item.company || "Unknown Company"} - {item.role || "Role"}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {new Date(item.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="font-bold">{item.readinessScore}</div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/* ======================================================
+   BASIC RUNTIME TESTS (DEV SAFETY)
+====================================================== */
+
+if (typeof window !== "undefined") {
+  console.assert(
+    extractSkills("React and SQL developer")["Web"].includes("react"),
+    "React detection failed"
+  );
+
+  console.assert(
+    calculateReadiness({
+      categoriesCount: 3,
+      company: "ABC",
+      role: "Dev",
+      jdLength: 900,
+    }) <= 100,
+    "Readiness score overflow"
+  );
+}
