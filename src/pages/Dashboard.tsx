@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,19 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Search, Sparkles, RotateCcw } from "lucide-react";
+import { Search, RotateCcw } from "lucide-react";
 import { extractSkills, calcReadinessScore, generateQuestions, generateChecklist, generatePlan } from "@/lib/jdAnalyzer";
-import { saveEntry, getEntryById } from "@/lib/historyStorage";
+import { saveEntry, getEntryById, updateEntry } from "@/lib/historyStorage";
 import type { AnalysisEntry } from "@/lib/types";
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "Core CS": "bg-primary/10 text-primary border-primary/20",
-  Languages: "bg-accent text-accent-foreground border-accent-foreground/20",
-  Web: "bg-primary/15 text-primary border-primary/25",
-  Data: "bg-muted text-foreground border-border",
-  "Cloud/DevOps": "bg-secondary text-secondary-foreground border-border",
-  Testing: "bg-muted text-muted-foreground border-border",
-};
+import SkillTags from "@/components/dashboard/SkillTags";
+import ExportButtons from "@/components/dashboard/ExportButtons";
+import ActionNextBox from "@/components/dashboard/ActionNextBox";
 
 const Dashboard = () => {
   const [company, setCompany] = useState("");
@@ -28,8 +22,8 @@ const Dashboard = () => {
   const [jdText, setJdText] = useState("");
   const [result, setResult] = useState<AnalysisEntry | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [confidenceMap, setConfidenceMap] = useState<Record<string, "know" | "practice">>({});
 
-  // Load from URL param if viewing a history entry
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const entryId = params.get("entry");
@@ -40,18 +34,50 @@ const Dashboard = () => {
         setCompany(entry.company);
         setRole(entry.role);
         setJdText(entry.jdText);
+        setConfidenceMap(entry.skillConfidenceMap || initConfidence(entry));
       }
     }
   }, []);
 
+  function initConfidence(entry: AnalysisEntry): Record<string, "know" | "practice"> {
+    const map: Record<string, "know" | "practice"> = {};
+    entry.extractedSkills.flatMap((g) => g.skills).forEach((s) => (map[s] = "practice"));
+    return map;
+  }
+
+  const liveScore = useCallback(
+    (base: number, map: Record<string, "know" | "practice">) => {
+      let adj = base;
+      Object.values(map).forEach((v) => (adj += v === "know" ? 2 : -2));
+      return Math.max(0, Math.min(100, adj));
+    },
+    []
+  );
+
+  const handleToggleSkill = (skill: string) => {
+    setConfidenceMap((prev) => {
+      const next = { ...prev, [skill]: prev[skill] === "know" ? "practice" as const : "know" as const };
+      // Persist
+      if (result) {
+        const updated = { ...result, skillConfidenceMap: next, readinessScore: liveScore(result.readinessScore, next) };
+        // We update the displayed result's base score stays the same; only liveScore changes display
+        updateEntry({ ...result, skillConfidenceMap: next });
+      }
+      return next;
+    });
+  };
+
+  const currentScore = result ? liveScore(result.readinessScore, confidenceMap) : 0;
+
   const handleAnalyze = () => {
     if (!jdText.trim()) return;
-
     const skills = extractSkills(jdText);
     const score = calcReadinessScore(skills, company, role, jdText);
     const questions = generateQuestions(skills);
     const checklist = generateChecklist(skills);
     const plan = generatePlan(skills);
+    const conf = {} as Record<string, "know" | "practice">;
+    skills.flatMap((g) => g.skills).forEach((s) => (conf[s] = "practice"));
 
     const entry: AnalysisEntry = {
       id: crypto.randomUUID(),
@@ -64,11 +90,13 @@ const Dashboard = () => {
       checklist,
       questions,
       readinessScore: score,
+      skillConfidenceMap: conf,
     };
 
     saveEntry(entry);
     setResult(entry);
     setCheckedItems({});
+    setConfidenceMap(conf);
   };
 
   const handleReset = () => {
@@ -77,7 +105,7 @@ const Dashboard = () => {
     setJdText("");
     setResult(null);
     setCheckedItems({});
-    // Clear URL param
+    setConfidenceMap({});
     window.history.replaceState({}, "", "/dashboard");
   };
 
@@ -92,7 +120,6 @@ const Dashboard = () => {
           <h1 className="text-2xl font-bold tracking-tight">JD Analyzer</h1>
           <p className="text-muted-foreground">Paste a job description to get a tailored preparation plan.</p>
         </div>
-
         <Card>
           <CardHeader>
             <CardTitle>Job Description</CardTitle>
@@ -102,41 +129,20 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="company">Company Name</Label>
-                <Input
-                  id="company"
-                  placeholder="e.g. Google"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                />
+                <Input id="company" placeholder="e.g. Google" value={company} onChange={(e) => setCompany(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Input
-                  id="role"
-                  placeholder="e.g. SDE Intern"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                />
+                <Input id="role" placeholder="e.g. SDE Intern" value={role} onChange={(e) => setRole(e.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="jd">Job Description Text</Label>
-              <Textarea
-                id="jd"
-                placeholder="Paste the full job description here..."
-                className="min-h-[200px] resize-y"
-                value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
-              />
+              <Textarea id="jd" placeholder="Paste the full job description here..." className="min-h-[200px] resize-y" value={jdText} onChange={(e) => setJdText(e.target.value)} />
               <p className="text-xs text-muted-foreground">{jdText.length} characters · Longer JDs improve accuracy</p>
             </div>
-            <Button
-              onClick={handleAnalyze}
-              disabled={!jdText.trim()}
-              className="w-full sm:w-auto"
-            >
-              <Search className="w-4 h-4 mr-2" />
-              Analyze JD
+            <Button onClick={handleAnalyze} disabled={!jdText.trim()} className="w-full sm:w-auto">
+              <Search className="w-4 h-4 mr-2" /> Analyze JD
             </Button>
           </CardContent>
         </Card>
@@ -158,8 +164,7 @@ const Dashboard = () => {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleReset}>
-          <RotateCcw className="w-4 h-4 mr-2" />
-          New Analysis
+          <RotateCcw className="w-4 h-4 mr-2" /> New Analysis
         </Button>
       </div>
 
@@ -169,17 +174,13 @@ const Dashboard = () => {
           <div className="relative flex h-24 w-24 items-center justify-center shrink-0">
             <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
               <circle cx="50" cy="50" r="40" className="fill-none stroke-secondary" strokeWidth="8" />
-              <circle
-                cx="50" cy="50" r="40"
-                className="fill-none stroke-primary"
-                strokeWidth="8"
-                strokeLinecap="round"
+              <circle cx="50" cy="50" r="40" className="fill-none stroke-primary" strokeWidth="8" strokeLinecap="round"
                 strokeDasharray={2 * Math.PI * 40}
-                strokeDashoffset={2 * Math.PI * 40 * (1 - result.readinessScore / 100)}
+                strokeDashoffset={2 * Math.PI * 40 * (1 - currentScore / 100)}
                 style={{ transition: "stroke-dashoffset 0.8s ease-in-out" }}
               />
             </svg>
-            <span className="absolute text-xl font-bold">{result.readinessScore}</span>
+            <span className="absolute text-xl font-bold">{currentScore}</span>
           </div>
           <div>
             <h3 className="font-semibold text-lg">Readiness Score</h3>
@@ -187,10 +188,14 @@ const Dashboard = () => {
               Based on {result.extractedSkills.reduce((a, s) => a + s.skills.length, 0)} detected skills
               {result.company ? `, targeting ${result.company}` : ""}
             </p>
-            <Progress value={result.readinessScore} className="h-2 mt-2 w-64" />
+            <Progress value={currentScore} className="h-2 mt-2 w-64" />
+            <p className="text-xs text-muted-foreground mt-1">Toggle skills below to update your score in real-time</p>
           </div>
         </CardContent>
       </Card>
+
+      {/* Export Buttons */}
+      <ExportButtons result={result} />
 
       <Tabs defaultValue="skills" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
@@ -201,33 +206,7 @@ const Dashboard = () => {
         </TabsList>
 
         <TabsContent value="skills" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                Extracted Skills
-              </CardTitle>
-              <CardDescription>Skills detected from the job description, grouped by category.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {result.extractedSkills.map((group) => (
-                <div key={group.category}>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">{group.category}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {group.skills.map((skill) => (
-                      <Badge
-                        key={skill}
-                        variant="outline"
-                        className={CATEGORY_COLORS[group.category] || ""}
-                      >
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <SkillTags skills={result.extractedSkills} confidenceMap={confidenceMap} onToggle={handleToggleSkill} />
         </TabsContent>
 
         <TabsContent value="checklist" className="space-y-4 mt-4">
@@ -241,14 +220,8 @@ const Dashboard = () => {
                   const key = `${round.round}-${i}`;
                   return (
                     <label key={key} className="flex items-start gap-3 cursor-pointer group">
-                      <Checkbox
-                        checked={!!checkedItems[key]}
-                        onCheckedChange={() => toggleCheck(key)}
-                        className="mt-0.5"
-                      />
-                      <span className={`text-sm leading-relaxed ${checkedItems[key] ? "line-through text-muted-foreground" : ""}`}>
-                        {item}
-                      </span>
+                      <Checkbox checked={!!checkedItems[key]} onCheckedChange={() => toggleCheck(key)} className="mt-0.5" />
+                      <span className={`text-sm leading-relaxed ${checkedItems[key] ? "line-through text-muted-foreground" : ""}`}>{item}</span>
                     </label>
                   );
                 })}
@@ -272,14 +245,8 @@ const Dashboard = () => {
                     const key = `plan-${day.day}-${i}`;
                     return (
                       <label key={key} className="flex items-start gap-3 cursor-pointer">
-                        <Checkbox
-                          checked={!!checkedItems[key]}
-                          onCheckedChange={() => toggleCheck(key)}
-                          className="mt-0.5"
-                        />
-                        <span className={`text-sm leading-relaxed ${checkedItems[key] ? "line-through text-muted-foreground" : ""}`}>
-                          {task}
-                        </span>
+                        <Checkbox checked={!!checkedItems[key]} onCheckedChange={() => toggleCheck(key)} className="mt-0.5" />
+                        <span className={`text-sm leading-relaxed ${checkedItems[key] ? "line-through text-muted-foreground" : ""}`}>{task}</span>
                       </label>
                     );
                   })}
@@ -299,9 +266,7 @@ const Dashboard = () => {
               <ol className="space-y-3">
                 {result.questions.map((q, i) => (
                   <li key={i} className="flex gap-3 text-sm">
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
-                      {i + 1}
-                    </span>
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">{i + 1}</span>
                     <span className="leading-relaxed pt-0.5">{q}</span>
                   </li>
                 ))}
@@ -310,6 +275,9 @@ const Dashboard = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Action Next Box */}
+      <ActionNextBox confidenceMap={confidenceMap} />
     </div>
   );
 };
