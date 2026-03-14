@@ -11,10 +11,13 @@ import { Progress } from "@/components/ui/progress";
 import { Search, RotateCcw } from "lucide-react";
 import { extractSkills, calcReadinessScore, generateQuestions, generateChecklist, generatePlan } from "@/lib/jdAnalyzer";
 import { saveEntry, getEntryById, updateEntry } from "@/lib/historyStorage";
+import { generateCompanyIntel } from "@/lib/companyIntel";
 import type { AnalysisEntry } from "@/lib/types";
 import SkillTags from "@/components/dashboard/SkillTags";
 import ExportButtons from "@/components/dashboard/ExportButtons";
 import ActionNextBox from "@/components/dashboard/ActionNextBox";
+import CompanyIntelCard from "@/components/dashboard/CompanyIntelCard";
+import RoundTimeline from "@/components/dashboard/RoundTimeline";
 
 const Dashboard = () => {
   const [company, setCompany] = useState("");
