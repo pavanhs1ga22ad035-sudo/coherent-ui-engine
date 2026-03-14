@@ -82,6 +82,8 @@ const Dashboard = () => {
     const conf = {} as Record<string, "know" | "practice">;
     skills.flatMap((g) => g.skills).forEach((s) => (conf[s] = "practice"));
 
+    const intel = company.trim() ? generateCompanyIntel(company, skills) : null;
+
     const entry: AnalysisEntry = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -94,6 +96,7 @@ const Dashboard = () => {
       questions,
       readinessScore: score,
       skillConfidenceMap: conf,
+      companyIntel: intel,
     };
 
     saveEntry(entry);
