@@ -4,7 +4,8 @@ export type SkillCategory =
   | "Web"
   | "Data"
   | "Cloud/DevOps"
-  | "Testing";
+  | "Testing"
+  | "Other";
 
 export interface ExtractedSkills {
   category: SkillCategory;
@@ -26,6 +27,7 @@ export interface DayPlan {
 export interface AnalysisEntry {
   id: string;
   createdAt: string;
+  updatedAt: string;
   company: string;
   role: string;
   jdText: string;
@@ -33,7 +35,10 @@ export interface AnalysisEntry {
   plan: DayPlan[];
   checklist: ChecklistRound[];
   questions: string[];
-  readinessScore: number;
-  skillConfidenceMap?: Record<string, "know" | "practice">;
+  baseScore: number;
+  finalScore: number;
+  skillConfidenceMap: Record<string, "know" | "practice">;
   companyIntel?: import("@/lib/companyIntel").CompanyIntel | null;
+  /** @deprecated Use baseScore/finalScore instead */
+  readinessScore?: number;
 }

@@ -10,6 +10,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Data: "bg-muted text-foreground border-border",
   "Cloud/DevOps": "bg-secondary text-secondary-foreground border-border",
   Testing: "bg-muted text-muted-foreground border-border",
+  Other: "bg-muted text-muted-foreground border-border",
 };
 
 interface SkillTagsProps {

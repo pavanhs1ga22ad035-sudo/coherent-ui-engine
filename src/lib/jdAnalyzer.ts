@@ -1,6 +1,6 @@
 import type { SkillCategory, ExtractedSkills, ChecklistRound, DayPlan } from "./types";
 
-const SKILL_MAP: Record<SkillCategory, string[]> = {
+const SKILL_MAP: Record<Exclude<SkillCategory, "Other">, string[]> = {
   "Core CS": ["DSA", "OOP", "DBMS", "OS", "Networks", "Data Structures", "Algorithms", "Operating System"],
   Languages: ["Java", "Python", "JavaScript", "TypeScript", "C++", "C#", "Go", "Golang"],
   Web: ["React", "Next.js", "Node.js", "Express", "REST", "GraphQL", "Angular", "Vue", "HTML", "CSS", "Tailwind"],
@@ -8,6 +8,8 @@ const SKILL_MAP: Record<SkillCategory, string[]> = {
   "Cloud/DevOps": ["AWS", "Azure", "GCP", "Docker", "Kubernetes", "CI/CD", "Linux", "Terraform", "Jenkins"],
   Testing: ["Selenium", "Cypress", "Playwright", "JUnit", "PyTest", "Jest", "Testing", "Unit Test"],
 };
+
+const DEFAULT_OTHER_SKILLS = ["Communication", "Problem solving", "Basic coding", "Projects"];
 
 export function extractSkills(jdText: string): ExtractedSkills[] {
   const text = jdText.toLowerCase();
@@ -24,7 +26,7 @@ export function extractSkills(jdText: string): ExtractedSkills[] {
   }
 
   if (results.length === 0) {
-    results.push({ category: "Core CS", skills: ["General fresher stack"] });
+    results.push({ category: "Other", skills: [...DEFAULT_OTHER_SKILLS] });
   }
 
   return results;
@@ -38,13 +40,22 @@ export function calcReadinessScore(
 ): number {
   let score = 35;
   const realCategories = skills.filter(
-    (s) => !(s.skills.length === 1 && s.skills[0] === "General fresher stack"),
+    (s) => s.category !== "Other",
   );
   score += Math.min(realCategories.length * 5, 30);
   if (company.trim().length > 0) score += 10;
   if (role.trim().length > 0) score += 10;
   if (jdText.length > 800) score += 10;
   return Math.min(score, 100);
+}
+
+export function calcFinalScore(
+  baseScore: number,
+  confidenceMap: Record<string, "know" | "practice">,
+): number {
+  let adj = baseScore;
+  Object.values(confidenceMap).forEach((v) => (adj += v === "know" ? 2 : -2));
+  return Math.max(0, Math.min(100, adj));
 }
 
 const QUESTION_BANK: Record<string, string[]> = {
@@ -162,12 +173,23 @@ const QUESTION_BANK: Record<string, string[]> = {
   Playwright: [
     "What are the advantages of Playwright over other testing frameworks?",
   ],
-  "General fresher stack": [
-    "Tell me about a project you've built and your role in it.",
+  Communication: [
+    "Tell me about a time you explained a complex concept to a non-technical stakeholder.",
+    "How do you handle disagreements in a team setting?",
+  ],
+  "Problem solving": [
+    "Describe your approach to solving a problem you've never encountered before.",
+    "Walk me through how you debug an issue in production.",
+  ],
+  "Basic coding": [
     "What programming language are you most comfortable with and why?",
-    "How do you approach debugging a problem you haven't seen before?",
     "Explain a data structure you've used recently.",
     "What is version control and why is it important?",
+  ],
+  Projects: [
+    "Tell me about a project you've built and your role in it.",
+    "What was the most challenging technical decision you made in a project?",
+    "How do you approach testing your code?",
   ],
 };
 
@@ -182,7 +204,6 @@ export function generateQuestions(skills: ExtractedSkills[]): string[] {
     }
   }
 
-  // Generic fallbacks
   if (questions.length < 10) {
     const fallback = [
       "Tell me about yourself and your technical background.",
@@ -205,6 +226,7 @@ export function generateQuestions(skills: ExtractedSkills[]): string[] {
 export function generateChecklist(skills: ExtractedSkills[]): ChecklistRound[] {
   const allSkills = skills.flatMap((s) => s.skills);
   const hasCategory = (cat: SkillCategory) => skills.some((s) => s.category === cat);
+  const isOtherOnly = skills.length === 1 && skills[0].category === "Other";
 
   const round1: string[] = [
     "Review quantitative aptitude basics",
@@ -214,41 +236,54 @@ export function generateChecklist(skills: ExtractedSkills[]): ChecklistRound[] {
     "Review basic probability & permutation concepts",
   ];
 
-  const round2: string[] = [
-    "Solve 5 easy array/string problems",
-    "Solve 3 medium linked-list / tree problems",
-    "Review time & space complexity analysis",
-  ];
-  if (hasCategory("Core CS")) {
-    round2.push("Revise OS: process scheduling, deadlocks");
-    round2.push("Revise DBMS: normalization, SQL queries");
-    round2.push("Revise Networking: TCP/IP, HTTP vs HTTPS");
-  } else {
+  const round2: string[] = [];
+  if (isOtherOnly) {
+    round2.push("Study basic data structures: arrays, strings, stacks");
+    round2.push("Learn basic sorting algorithms");
+    round2.push("Practice 5 simple coding problems");
     round2.push("Study basic OOP concepts");
     round2.push("Learn common design patterns");
+  } else {
+    round2.push("Solve 5 easy array/string problems");
+    round2.push("Solve 3 medium linked-list / tree problems");
+    round2.push("Review time & space complexity analysis");
+    if (hasCategory("Core CS")) {
+      round2.push("Revise OS: process scheduling, deadlocks");
+      round2.push("Revise DBMS: normalization, SQL queries");
+      round2.push("Revise Networking: TCP/IP, HTTP vs HTTPS");
+    } else {
+      round2.push("Study basic OOP concepts");
+      round2.push("Learn common design patterns");
+    }
+    round2.push("Practice 2 dynamic programming problems");
+    round2.push("Review graph traversal algorithms");
   }
-  round2.push("Practice 2 dynamic programming problems");
-  round2.push("Review graph traversal algorithms");
 
   const round3: string[] = [
     "Prepare 2-minute pitch for each project",
     "Be ready to explain architecture decisions",
   ];
-  if (allSkills.some((s) => ["React", "Next.js", "Angular", "Vue"].includes(s))) {
-    round3.push("Review frontend component lifecycle & state management");
-    round3.push("Prepare to discuss responsive design approach");
-  }
-  if (allSkills.some((s) => ["Node.js", "Express", "REST", "GraphQL"].includes(s))) {
-    round3.push("Review backend API design patterns");
-    round3.push("Prepare to discuss authentication & authorization");
-  }
-  if (hasCategory("Data")) {
-    round3.push("Review database schema design principles");
-    round3.push("Prepare to discuss query optimization");
-  }
-  if (hasCategory("Cloud/DevOps")) {
-    round3.push("Review deployment pipeline and CI/CD basics");
-    round3.push("Prepare to discuss cloud architecture decisions");
+  if (isOtherOnly) {
+    round3.push("Prepare to discuss any personal or academic projects");
+    round3.push("Review your strongest programming language's basics");
+    round3.push("Prepare to whiteboard a simple solution");
+  } else {
+    if (allSkills.some((s) => ["React", "Next.js", "Angular", "Vue"].includes(s))) {
+      round3.push("Review frontend component lifecycle & state management");
+      round3.push("Prepare to discuss responsive design approach");
+    }
+    if (allSkills.some((s) => ["Node.js", "Express", "REST", "GraphQL"].includes(s))) {
+      round3.push("Review backend API design patterns");
+      round3.push("Prepare to discuss authentication & authorization");
+    }
+    if (hasCategory("Data")) {
+      round3.push("Review database schema design principles");
+      round3.push("Prepare to discuss query optimization");
+    }
+    if (hasCategory("Cloud/DevOps")) {
+      round3.push("Review deployment pipeline and CI/CD basics");
+      round3.push("Prepare to discuss cloud architecture decisions");
+    }
   }
   if (round3.length < 7) {
     round3.push("Review your strongest language's advanced features");
@@ -275,44 +310,61 @@ export function generateChecklist(skills: ExtractedSkills[]): ChecklistRound[] {
 export function generatePlan(skills: ExtractedSkills[]): DayPlan[] {
   const hasCategory = (cat: SkillCategory) => skills.some((s) => s.category === cat);
   const allSkills = skills.flatMap((s) => s.skills);
+  const isOtherOnly = skills.length === 1 && skills[0].category === "Other";
 
-  const day1Tasks = ["Review core CS fundamentals (OOP, OS basics)", "Brush up on aptitude & logical reasoning"];
-  if (hasCategory("Core CS")) day1Tasks.push("Revise DBMS normalization and SQL basics");
-  else day1Tasks.push("Study basic data structures: arrays, strings, stacks");
-  day1Tasks.push("Take a short self-assessment quiz");
+  const day1Tasks = isOtherOnly
+    ? ["Learn basic data structures (arrays, strings)", "Review OOP fundamentals", "Study basic algorithms (sorting, searching)", "Take a short self-assessment quiz"]
+    : (() => {
+        const t = ["Review core CS fundamentals (OOP, OS basics)", "Brush up on aptitude & logical reasoning"];
+        if (hasCategory("Core CS")) t.push("Revise DBMS normalization and SQL basics");
+        else t.push("Study basic data structures: arrays, strings, stacks");
+        t.push("Take a short self-assessment quiz");
+        return t;
+      })();
 
-  const day2Tasks = ["Deep dive into networking & OS concepts", "Practice 10 aptitude questions"];
-  if (hasCategory("Data")) day2Tasks.push("Practice SQL joins, subqueries, and indexing");
-  else day2Tasks.push("Study linked lists and trees");
-  day2Tasks.push("Review your resume for consistency");
+  const day2Tasks = isOtherOnly
+    ? ["Practice logical reasoning problems", "Study basic OS and networking concepts", "Write simple programs in your chosen language", "Review your resume for consistency"]
+    : (() => {
+        const t = ["Deep dive into networking & OS concepts", "Practice 10 aptitude questions"];
+        if (hasCategory("Data")) t.push("Practice SQL joins, subqueries, and indexing");
+        else t.push("Study linked lists and trees");
+        t.push("Review your resume for consistency");
+        return t;
+      })();
 
-  const day3Tasks = ["Solve 5 easy DSA problems (arrays/strings)", "Solve 3 medium problems (sorting/searching)"];
-  if (hasCategory("Languages")) day3Tasks.push(`Practice coding in ${allSkills.find((s) => ["Java", "Python", "JavaScript", "TypeScript", "C++"].includes(s)) || "your preferred language"}`);
-  else day3Tasks.push("Choose a language and solve problems in it");
-  day3Tasks.push("Review time complexity of all approaches");
+  const day3Tasks = isOtherOnly
+    ? ["Solve 5 easy coding problems", "Practice explaining solutions aloud", "Study time complexity basics", "Review your chosen language's syntax"]
+    : (() => {
+        const t = ["Solve 5 easy DSA problems (arrays/strings)", "Solve 3 medium problems (sorting/searching)"];
+        if (hasCategory("Languages")) t.push(`Practice coding in ${allSkills.find((s) => ["Java", "Python", "JavaScript", "TypeScript", "C++"].includes(s)) || "your preferred language"}`);
+        else t.push("Choose a language and solve problems in it");
+        t.push("Review time complexity of all approaches");
+        return t;
+      })();
 
-  const day4Tasks = ["Solve 2 dynamic programming problems", "Solve 2 graph/tree problems"];
-  day4Tasks.push("Practice explaining your approach out loud");
-  day4Tasks.push("Review common coding patterns (sliding window, two pointer)");
+  const day4Tasks = isOtherOnly
+    ? ["Solve 3 more coding problems (slightly harder)", "Practice problem-solving patterns", "Study basic system design concepts", "Review common coding patterns"]
+    : ["Solve 2 dynamic programming problems", "Solve 2 graph/tree problems", "Practice explaining your approach out loud", "Review common coding patterns (sliding window, two pointer)"];
 
-  const day5Tasks = ["Align resume bullet points with JD keywords", "Prepare 2-minute pitch for each project"];
-  if (allSkills.some((s) => ["React", "Next.js", "Angular"].includes(s))) {
-    day5Tasks.push("Review your frontend projects: component design, state mgmt");
-  }
-  if (allSkills.some((s) => ["Node.js", "Express", "Docker", "AWS"].includes(s))) {
-    day5Tasks.push("Review your backend/deployment projects");
+  const day5Tasks: string[] = ["Align resume bullet points with JD keywords", "Prepare 2-minute pitch for each project"];
+  if (!isOtherOnly) {
+    if (allSkills.some((s) => ["React", "Next.js", "Angular"].includes(s))) {
+      day5Tasks.push("Review your frontend projects: component design, state mgmt");
+    }
+    if (allSkills.some((s) => ["Node.js", "Express", "Docker", "AWS"].includes(s))) {
+      day5Tasks.push("Review your backend/deployment projects");
+    }
+  } else {
+    day5Tasks.push("Document any personal or academic projects clearly");
   }
   day5Tasks.push("Ensure GitHub repos are clean and documented");
 
-  const day6Tasks = ["Practice 10 likely interview questions aloud", "Do a mock behavioral interview (30 min)"];
-  if (hasCategory("Web")) day6Tasks.push("Practice system design: design a URL shortener");
+  const day6Tasks: string[] = ["Practice 10 likely interview questions aloud", "Do a mock behavioral interview (30 min)"];
+  if (!isOtherOnly && hasCategory("Web")) day6Tasks.push("Practice system design: design a URL shortener");
   else day6Tasks.push("Practice explaining a complex concept simply");
   day6Tasks.push("Record yourself and review for filler words");
 
-  const day7Tasks = ["Revisit weak areas from Day 3–4 practice", "Re-solve 3 problems you struggled with"];
-  day7Tasks.push("Final aptitude mock test");
-  day7Tasks.push("Prepare questions to ask the interviewer");
-  day7Tasks.push("Rest well and review key notes only");
+  const day7Tasks = ["Revisit weak areas from Day 3–4 practice", "Re-solve 3 problems you struggled with", "Final aptitude mock test", "Prepare questions to ask the interviewer", "Rest well and review key notes only"];
 
   return [
     { day: "Day 1", focus: "Core CS Fundamentals", tasks: day1Tasks },

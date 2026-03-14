@@ -3,16 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ExternalLink, Clock } from "lucide-react";
-import { getHistory, deleteEntry } from "@/lib/historyStorage";
+import { Trash2, ExternalLink, Clock, AlertTriangle } from "lucide-react";
+import { getHistory, deleteEntry, getCorruptedCount } from "@/lib/historyStorage";
 import type { AnalysisEntry } from "@/lib/types";
 
 const Assessments = () => {
   const [history, setHistory] = useState<AnalysisEntry[]>([]);
+  const [corrupted, setCorrupted] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     setHistory(getHistory());
+    setCorrupted(getCorruptedCount());
   }, []);
 
   const handleDelete = (id: string) => {
@@ -30,6 +32,17 @@ const Assessments = () => {
         <h1 className="text-2xl font-bold tracking-tight">Analysis History</h1>
         <p className="text-muted-foreground">Your past job description analyses, stored locally.</p>
       </div>
+
+      {corrupted > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 p-3">
+          <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+          <p className="text-sm text-warning">
+            {corrupted === 1
+              ? "One saved entry couldn't be loaded. Create a new analysis."
+              : `${corrupted} saved entries couldn't be loaded. Create a new analysis.`}
+          </p>
+        </div>
+      )}
 
       {history.length === 0 ? (
         <Card>
@@ -75,7 +88,7 @@ const Assessments = () => {
 
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <span className="text-2xl font-bold text-primary">{entry.readinessScore}</span>
+                    <span className="text-2xl font-bold text-primary">{entry.finalScore ?? entry.baseScore}</span>
                     <p className="text-xs text-muted-foreground">score</p>
                   </div>
                   <Button
