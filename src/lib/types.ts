@@ -35,4 +35,5 @@ export interface AnalysisEntry {
   questions: string[];
   readinessScore: number;
   skillConfidenceMap?: Record<string, "know" | "practice">;
+  companyIntel?: import("@/lib/companyIntel").CompanyIntel | null;
 }

@@ -11,10 +11,13 @@ import { Progress } from "@/components/ui/progress";
 import { Search, RotateCcw } from "lucide-react";
 import { extractSkills, calcReadinessScore, generateQuestions, generateChecklist, generatePlan } from "@/lib/jdAnalyzer";
 import { saveEntry, getEntryById, updateEntry } from "@/lib/historyStorage";
+import { generateCompanyIntel } from "@/lib/companyIntel";
 import type { AnalysisEntry } from "@/lib/types";
 import SkillTags from "@/components/dashboard/SkillTags";
 import ExportButtons from "@/components/dashboard/ExportButtons";
 import ActionNextBox from "@/components/dashboard/ActionNextBox";
+import CompanyIntelCard from "@/components/dashboard/CompanyIntelCard";
+import RoundTimeline from "@/components/dashboard/RoundTimeline";
 
 const Dashboard = () => {
   const [company, setCompany] = useState("");
@@ -79,6 +82,8 @@ const Dashboard = () => {
     const conf = {} as Record<string, "know" | "practice">;
     skills.flatMap((g) => g.skills).forEach((s) => (conf[s] = "practice"));
 
+    const intel = company.trim() ? generateCompanyIntel(company, skills) : null;
+
     const entry: AnalysisEntry = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -91,6 +96,7 @@ const Dashboard = () => {
       questions,
       readinessScore: score,
       skillConfidenceMap: conf,
+      companyIntel: intel,
     };
 
     saveEntry(entry);
@@ -193,6 +199,14 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Company Intel */}
+      {result.companyIntel && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CompanyIntelCard intel={result.companyIntel} />
+          <RoundTimeline rounds={result.companyIntel.rounds} />
+        </div>
+      )}
 
       {/* Export Buttons */}
       <ExportButtons result={result} />
