@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Search, RotateCcw } from "lucide-react";
-import { extractSkills, calcReadinessScore, generateQuestions, generateChecklist, generatePlan } from "@/lib/jdAnalyzer";
+import { Search, RotateCcw, AlertTriangle } from "lucide-react";
+import { extractSkills, calcReadinessScore, calcFinalScore, generateQuestions, generateChecklist, generatePlan } from "@/lib/jdAnalyzer";
 import { saveEntry, getEntryById, updateEntry } from "@/lib/historyStorage";
 import { generateCompanyIntel } from "@/lib/companyIntel";
 import type { AnalysisEntry } from "@/lib/types";
@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [result, setResult] = useState<AnalysisEntry | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [confidenceMap, setConfidenceMap] = useState<Record<string, "know" | "practice">>({});
+  const [jdWarning, setJdWarning] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -48,45 +49,52 @@ const Dashboard = () => {
     return map;
   }
 
-  const liveScore = useCallback(
-    (base: number, map: Record<string, "know" | "practice">) => {
-      let adj = base;
-      Object.values(map).forEach((v) => (adj += v === "know" ? 2 : -2));
-      return Math.max(0, Math.min(100, adj));
-    },
-    []
-  );
-
   const handleToggleSkill = (skill: string) => {
     setConfidenceMap((prev) => {
       const next = { ...prev, [skill]: prev[skill] === "know" ? "practice" as const : "know" as const };
-      // Persist
       if (result) {
-        const updated = { ...result, skillConfidenceMap: next, readinessScore: liveScore(result.readinessScore, next) };
-        // We update the displayed result's base score stays the same; only liveScore changes display
-        updateEntry({ ...result, skillConfidenceMap: next });
+        const newFinal = calcFinalScore(result.baseScore, next);
+        const updated: AnalysisEntry = {
+          ...result,
+          skillConfidenceMap: next,
+          finalScore: newFinal,
+          updatedAt: new Date().toISOString(),
+        };
+        updateEntry(updated);
+        setResult(updated);
       }
       return next;
     });
   };
 
-  const currentScore = result ? liveScore(result.readinessScore, confidenceMap) : 0;
+  const currentScore = result ? calcFinalScore(result.baseScore, confidenceMap) : 0;
+
+  const handleJdChange = (value: string) => {
+    setJdText(value);
+    if (value.trim().length > 0 && value.trim().length < 200) {
+      setJdWarning("This JD is too short to analyze deeply. Paste full JD for better output.");
+    } else {
+      setJdWarning("");
+    }
+  };
 
   const handleAnalyze = () => {
     if (!jdText.trim()) return;
     const skills = extractSkills(jdText);
-    const score = calcReadinessScore(skills, company, role, jdText);
+    const baseScore = calcReadinessScore(skills, company, role, jdText);
     const questions = generateQuestions(skills);
     const checklist = generateChecklist(skills);
     const plan = generatePlan(skills);
-    const conf = {} as Record<string, "know" | "practice">;
+    const conf: Record<string, "know" | "practice"> = {};
     skills.flatMap((g) => g.skills).forEach((s) => (conf[s] = "practice"));
 
     const intel = company.trim() ? generateCompanyIntel(company, skills) : null;
+    const now = new Date().toISOString();
 
     const entry: AnalysisEntry = {
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       company: company.trim(),
       role: role.trim(),
       jdText,
@@ -94,7 +102,8 @@ const Dashboard = () => {
       plan,
       checklist,
       questions,
-      readinessScore: score,
+      baseScore,
+      finalScore: calcFinalScore(baseScore, conf),
       skillConfidenceMap: conf,
       companyIntel: intel,
     };
@@ -103,6 +112,7 @@ const Dashboard = () => {
     setResult(entry);
     setCheckedItems({});
     setConfidenceMap(conf);
+    setJdWarning("");
   };
 
   const handleReset = () => {
@@ -112,6 +122,7 @@ const Dashboard = () => {
     setResult(null);
     setCheckedItems({});
     setConfidenceMap({});
+    setJdWarning("");
     window.history.replaceState({}, "", "/dashboard");
   };
 
@@ -134,18 +145,33 @@ const Dashboard = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="company">Company Name</Label>
+                <Label htmlFor="company">Company Name <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <Input id="company" placeholder="e.g. Google" value={company} onChange={(e) => setCompany(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="role">Role <span className="text-muted-foreground text-xs">(optional)</span></Label>
                 <Input id="role" placeholder="e.g. SDE Intern" value={role} onChange={(e) => setRole(e.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="jd">Job Description Text</Label>
-              <Textarea id="jd" placeholder="Paste the full job description here..." className="min-h-[200px] resize-y" value={jdText} onChange={(e) => setJdText(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{jdText.length} characters · Longer JDs improve accuracy</p>
+              <Label htmlFor="jd">Job Description Text <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="jd"
+                placeholder="Paste the full job description here..."
+                className="min-h-[200px] resize-y"
+                value={jdText}
+                onChange={(e) => handleJdChange(e.target.value)}
+                required
+              />
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">{jdText.length} characters · Longer JDs improve accuracy</p>
+              </div>
+              {jdWarning && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 p-3">
+                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+                  <p className="text-sm text-warning">{jdWarning}</p>
+                </div>
+              )}
             </div>
             <Button onClick={handleAnalyze} disabled={!jdText.trim()} className="w-full sm:w-auto">
               <Search className="w-4 h-4 mr-2" /> Analyze JD
@@ -191,8 +217,8 @@ const Dashboard = () => {
           <div>
             <h3 className="font-semibold text-lg">Readiness Score</h3>
             <p className="text-sm text-muted-foreground">
-              Based on {result.extractedSkills.reduce((a, s) => a + s.skills.length, 0)} detected skills
-              {result.company ? `, targeting ${result.company}` : ""}
+              Base: {result.baseScore} · Live: {currentScore} · {result.extractedSkills.reduce((a, s) => a + s.skills.length, 0)} skills
+              {result.company ? ` · ${result.company}` : ""}
             </p>
             <Progress value={currentScore} className="h-2 mt-2 w-64" />
             <p className="text-xs text-muted-foreground mt-1">Toggle skills below to update your score in real-time</p>
