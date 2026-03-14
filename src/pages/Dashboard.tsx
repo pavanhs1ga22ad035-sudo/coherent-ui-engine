@@ -200,6 +200,14 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
+      {/* Company Intel */}
+      {result.companyIntel && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CompanyIntelCard intel={result.companyIntel} />
+          <RoundTimeline rounds={result.companyIntel.rounds} />
+        </div>
+      )}
+
       {/* Export Buttons */}
       <ExportButtons result={result} />
 
