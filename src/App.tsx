@@ -12,6 +12,7 @@ import Resources from "./pages/Resources";
 import Profile from "./pages/Profile";
 import Testing from "./pages/Testing";
 import Ship from "./pages/Ship";
+import Proof from "./pages/Proof";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
