@@ -21,6 +21,8 @@ const navItems = [
   { title: "Assessments", url: "/dashboard/assessments", icon: ClipboardCheck },
   { title: "Resources", url: "/dashboard/resources", icon: FolderOpen },
   { title: "Profile", url: "/dashboard/profile", icon: User },
+  { title: "Testing", url: "/dashboard/testing", icon: TestTube2 },
+  { title: "Ship", url: "/dashboard/ship", icon: Rocket },
 ];
 
 function AppSidebar() {
