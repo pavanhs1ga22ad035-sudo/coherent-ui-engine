@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { LayoutDashboard, BookOpen, ClipboardCheck, FolderOpen, User, TestTube2, Rocket } from "lucide-react";
+import { LayoutDashboard, BookOpen, ClipboardCheck, FolderOpen, User, TestTube2, Rocket, FileCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
