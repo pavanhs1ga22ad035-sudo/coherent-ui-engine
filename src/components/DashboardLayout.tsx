@@ -22,6 +22,7 @@ const navItems = [
   { title: "Resources", url: "/dashboard/resources", icon: FolderOpen },
   { title: "Profile", url: "/dashboard/profile", icon: User },
   { title: "Testing", url: "/dashboard/testing", icon: TestTube2 },
+  { title: "Proof", url: "/dashboard/proof", icon: FileCheck },
   { title: "Ship", url: "/dashboard/ship", icon: Rocket },
 ];
 
